@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-02-03 16:56:16 john";
+ * Time-stamp: "2018-02-04 09:54:09 john";
  * John Sheahan December 2017
  *
  */
@@ -29,11 +29,11 @@ void enable_t3_int(void) ;
  * This is the firmware for a controller to fill a header tank from the farm 
  * main rainwater tanks.
  * The header tank has a couple of reasons for its existance.
- * 1. more pressure. Wanted sufficient to fill a barn roof mounted 
- *  solar hot water
+ * 1. more pressure. Want sufficient to fill a barn roof mounted 
+ *  solar hot water system.
  * 2. provide a measure of, and some protection against bad, water leaks. 
  *  By some combination of counting the number of header tank fill cycles, and 
- *  timing the fill time, I can get a measure of the amount of water consumed in a day.   Or some convenient period.    If the consumption is too high (like a significant leak) then the controller refuses to fill more without operator intervention. 
+ *  timing the fill time, I can get a measure of the amount of water consumed in a day.   Or some convenient period.    If the consumption is too high (like a significant leak) then the controller refuses to fill more without operator intervention.    Right now, a credit is consumed every 10s of pump running.
  * 
  * So I want to time the pump runtime (it seems to be about 3 minutes to get 
  * to the initial level, then total 10 minutes to fill the header tank.
@@ -41,11 +41,27 @@ void enable_t3_int(void) ;
  * 
  * Also want to allocate  credits, say ~ 250l per day. Which hopefully is 
  * sufficient for a heavy useage day.  Credits are allocated daily, but don't accumulate past ~~ 1 days worth.       Time resolution of 1s would be heaps.
+ * 1 Credit is consumed every 10 seconds of pump running
+ * 
+ * Also credits don't get allocated if zero.  You have to do the first one
+ * manually, also manually ack it if credits gets to zero. 
+ * This is to ensure an unattended serious fault is capped after a day. 
  * 
  * Ability to manually add credits for some special occasion. ~~ days worth.
  * ability to disable pump.
  * 
  */
+
+/* TODO
+ * add lcd display as somewhat easier than the blinker
+ * add NV storage perhaps for daily credits, and UI support to adjust it.
+ * A top limit switch failure would result in dumping the full daily (current 
+ * pending) credits of water in one long pump.   
+ * A break between pump and header tank would do the same.  
+ * Could consider having a limit on pump runtime.  Downside seems to be 
+ * steady consumption at or greater than pump flow seems precluded then. 
+ */
+
 
 /* Implementation
  * Some sort of interrupt accumulating time, with roughly 1s resolution. 
@@ -60,17 +76,14 @@ void enable_t3_int(void) ;
 
 
 
-
-// delay needs a compile time constant, so make it a macro
-// #define BLINK_LED_OK    LED_ON; _delay_ms(BLINK_OK);   LED_OFF;
-// #define BLINK_LED_BAD  LED_ON;  _delay_ms(BLINK_BAD);  LED_OFF;
-
+/* global variables */
 
 // counts 'seconds' for at least a day
 uint32_t     timer;
 
 // counts 'seconds' for the motor on... to get to a motor credit. 
 uint8_t     on_timer;
+
 uint8_t     pump_state;
 
 int main(void)
@@ -79,7 +92,7 @@ int main(void)
   uint8_t     blink_timer;
   uint8_t     blink_state;
   uint8_t     blink_seq_on_time;
-  uint8_t     last_credit_pb;  // debounces pushbutton
+  uint8_t     last_credit_pb;      // debounces pushbutton
   int16_t     credits;
   int16_t     blink_seq_count;
   uint8_t     debug_count;
@@ -121,11 +134,13 @@ int main(void)
     print("hello from watertank\n");
   }
   LED_ON;
-
+  // main loop runs forever, about every 100ms. Thats the time resolution of
+  // the blinker. 
+  
   while (1) {
     _delay_ms(MAINLOOP_PERIOD);
 
-    // pump state machine
+    // pump state machine .. control the pump
     switch  (pump_state)
       {
       case PUMP_STATE_LIMITS_BROKEN:
@@ -182,8 +197,9 @@ int main(void)
     
     
     // UI state machine
-    // today, UI inputs are the credit pushbutton.
+    // today, Only UI input is the manual credit pushbutton.
 
+    // debounce the pb a bit. Issue credit on posedge.
     if ((last_credit_pb != credit_pb_state) &&  (credit_pb_pressed))
       {
 	credits += CREDIT_PER_PB;
@@ -192,6 +208,13 @@ int main(void)
 
     // blinker state machine
     // blink_timer is a single byte, so don't worry about ISRs / SEI / CLI
+    // the blink code is:
+    // a gap then a short frame marker
+    // a second short frame marker if there has been a limits problem
+    // a series of long blinks, where each long blink is about a header tank fill long.
+    // the last long blink can be fractional... eg 4 1/2 long blinks.
+    // each long blink represents 50 credits or 500s of runtime
+
     blink_timer++;
     switch (blink_state)
       {
@@ -284,12 +307,15 @@ int main(void)
 	
 	
 
-    // issue credit
+    // auto issue credit daily.
+    // Issue credit up to a maximum of DAILY_CREDIT
+    // Don't issue credit if its run down to zero. Require manual
+    // intervention in that event.
     cli();
     if (timer >= TICKS_PER_DAY)
       {
 	timer = 0;
-	if (credits <= DAILY_CREDIT)
+	if ((credits <= DAILY_CREDIT) && (credits > 0))
 	  {
 	    credits = DAILY_CREDIT;
 	  }
@@ -303,7 +329,8 @@ int main(void)
     // phex1(time_temp8);
     // print("\n");
 	  
-
+#define DEBUG
+#ifdef DEBUG
     debug_count++;
     if (debug_count == 50)
       {
@@ -373,7 +400,7 @@ int main(void)
 	print("\n");
 	debug_count = 0;
       }
-	
+#endif	
     
   }
 }
@@ -408,12 +435,13 @@ void setup_io (void) {
 }
 
 
-// if I consider T3
-// its a 16 bit timer
-// can prescale by 1024
-// I've made clk_cpu 8MHz, so seems like clkI/0 is 8mhz
-// divided by 2^16 and divided by 8 thats a timer overflow of 152.58Hz
-// postscaling by 153, get one tick every 1s +/- 1% 
+// T3 is used to update a 'timer' register, counting seconds. It accumulates
+// up to one day then gets reset when credit is autoissued.  
+
+// T3 is a 16 bit timer
+// I've made clk_cpu 8MHz, so seems like clkI/0 is 8mhz. Teensy2.0 runs at 3.3v
+// divided by 2^16 and divided by 8 thats a timer overflow of 15.25Hz
+// postscaled by 15.25, get one tick every 1s 
 uint8_t     t3_postscaler;
 uint8_t     t3_postscaler4;
 
@@ -422,14 +450,11 @@ uint8_t     t3_postscaler4;
 void enable_t3_int (void)
 {
   //  PRR1 &= ~(0x10);        // power control
-                          // clock source
-                          // enable
-                          // OF int
   TCCR3A = 0;             // no output compare bits, normal operation
   TCCR3B = 2;             // input prescaled 8
   TCCR3C = 0;             // no force output compare
   TIFR3 =  0;             // clear overflow flag
-  TIMSK3 = 1;             // timer overflow inten
+  TIMSK3 = 1;             // timer overflow interrupt enable
 }
 
 
@@ -438,8 +463,8 @@ ISR(TIMER3_OVF_vect)
 { /* timer3 overflow */
   /* dividing t3 by 15.25 to get close to 1hz */
   t3_postscaler++;
-  if (((t3_postscaler == (T3_POST-1)) && (t3_postscaler4 !=(T3_POST4-1))) ||
-      (t3_postscaler == (T3_POST)))
+  if (((t3_postscaler == (T3_POST)) && (t3_postscaler4 !=(T3_POST4-1))) ||
+      (t3_postscaler > (T3_POST)))
     {
       t3_postscaler4++;
       if (t3_postscaler4 == T3_POST4)
@@ -447,12 +472,11 @@ ISR(TIMER3_OVF_vect)
 	  t3_postscaler4 = 0;
 	}
       t3_postscaler = 0;
-      timer = timer + 1;
+      timer++;
       if (pump_state == PUMP_STATE_ON)
 	{
-	  on_timer = on_timer + 1;
+	  on_timer++;
 	}
     }
-  
 }
 
