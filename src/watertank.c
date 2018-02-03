@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-02-04 09:54:09 john";
+ * Time-stamp: "2018-02-04 09:59:20 john";
  * John Sheahan December 2017
  *
  */
@@ -97,7 +97,7 @@ int main(void)
   int16_t     blink_seq_count;
   uint8_t     debug_count;
   uint16_t    time_temp;  
-  uint8_t    time_temp8;  
+  //  uint8_t    time_temp8;  
   uint8_t    limits_were_broken;  
 
   // set for 8 MHz clock, and make sure the LED is off
@@ -125,6 +125,7 @@ int main(void)
   pump_state = PUMP_STATE_OFF;
   blink_state = BLINK_FRAME_GAP;
   limits_were_broken = 0;
+  last_credit_pb = credit_pb_state;
   
   for (i =0; i<2; i++) {
     LED_ON;
