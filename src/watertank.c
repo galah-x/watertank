@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-01-28 21:01:42 john";
+ * Time-stamp: "2018-02-03 16:56:16 john";
  * John Sheahan December 2017
  *
  */
@@ -68,22 +68,28 @@ void enable_t3_int(void) ;
 
 // counts 'seconds' for at least a day
 uint32_t     timer;
+
 // counts 'seconds' for the motor on... to get to a motor credit. 
 uint8_t     on_timer;
+uint8_t     pump_state;
 
 int main(void)
 {
   int i;
   uint8_t     blink_timer;
-  uint8_t     pump_state;
   uint8_t     blink_state;
   uint8_t     blink_seq_on_time;
   uint8_t     last_credit_pb;  // debounces pushbutton
   int16_t     credits;
   int16_t     blink_seq_count;
-  
+  uint8_t     debug_count;
+  uint16_t    time_temp;  
+  uint8_t    time_temp8;  
+  uint8_t    limits_were_broken;  
+
   // set for 8 MHz clock, and make sure the LED is off
   CPU_PRESCALE(1);
+
   setup_io();
   i2c_init();
   LED_ON;
@@ -91,7 +97,7 @@ int main(void)
   LED_OFF;
   _delay_ms(300);
   LED_ON;
-
+  debug_count=0;
 
   // INITIALIZE the USB, but don't want for the host to
   // configure.  The first several messages sent will be
@@ -105,13 +111,14 @@ int main(void)
   credits=0;
   pump_state = PUMP_STATE_OFF;
   blink_state = BLINK_FRAME_GAP;
+  limits_were_broken = 0;
   
   for (i =0; i<2; i++) {
     LED_ON;
     _delay_ms(500);
     LED_OFF;
     _delay_ms(500);
-    print("hello from weather\n");
+    print("hello from watertank\n");
   }
   LED_ON;
 
@@ -123,8 +130,10 @@ int main(void)
       {
       case PUMP_STATE_LIMITS_BROKEN:
 	{
-	  credits=0;
-	  PUMP_OFF;
+	  if (!((above_header_tank_top) && (below_header_tank_bottom)))
+	    {
+	      pump_state = PUMP_STATE_OFF;
+	    } 
 	  break;
 	}
 	
@@ -136,15 +145,18 @@ int main(void)
 		{
 		  pump_state = PUMP_STATE_LIMITS_BROKEN;
 		  PUMP_OFF;
+		  limits_were_broken = 1;
+		  credits = 0;
 		  break;
 		}
 	      pump_state = PUMP_STATE_OFF;
 	      PUMP_OFF;
 	    }
-	  if (on_timer == ON_CREDIT_TIME) {
+	  if (on_timer >= ON_CREDIT_TIME) {
 	    if (credits > 0)
 	      {
 		credits--;
+		on_timer = 0;
 	      }
 	    else 
 	    { pump_state = PUMP_STATE_OFF;
@@ -192,6 +204,31 @@ int main(void)
 	  break;
 	}
       case BLINK_FRAME_ON:
+	{ if (blink_timer == blink_frame_on_time)
+	    {
+	      if (limits_were_broken)
+		{
+		  blink_state = BLINK_LIMITS_OFF;
+		} else
+		{
+		  blink_state = BLINK_SEQ_OFF;
+		}
+	      blink_timer=0;
+	      LED_OFF;
+	      blink_seq_count=credits / credit_blink_scale;
+	      
+	    }
+	  break;
+	}
+      case BLINK_LIMITS_OFF:
+	{ if (blink_timer == blink_frame_gap_time)
+	    { blink_state = BLINK_LIMITS_ON;
+	      blink_timer=0;
+	      LED_ON;
+	    }
+	  break;
+	}
+      case BLINK_LIMITS_ON:
 	{ if (blink_timer == blink_frame_on_time)
 	    { blink_state = BLINK_SEQ_OFF;
 	      blink_timer=0;
@@ -259,6 +296,84 @@ int main(void)
       }
     sei();
       
+
+    // debug
+
+    //    time_temp8 = timer;
+    // phex1(time_temp8);
+    // print("\n");
+	  
+
+    debug_count++;
+    if (debug_count == 50)
+      {
+	print("credit=");
+	printd3(credits);
+	print(" on_timer=");
+	phex16(on_timer);
+	time_temp = timer;
+	print(" timer=");
+	phex16(time_temp);
+	print(" pump_state=");
+
+	if (pump_state == PUMP_STATE_LIMITS_BROKEN)
+	  { print("LIMITS_BROKEN");
+	  }
+	else  
+	  if (pump_state == PUMP_STATE_ON)
+	    { print("ON");
+	    }
+	  else
+	    if (pump_state == PUMP_STATE_OFF)
+	      { print("OFF");
+	      }
+	
+	print(" blink_state=");
+	if (blink_state == BLINK_FRAME_GAP)
+	  { print("FRAME_GAP");
+	  }
+	else  
+	if (blink_state == BLINK_FRAME_ON)
+	  { print("FRAME_ON");
+	  }
+	else  
+	if (blink_state == BLINK_SEQ_OFF)
+	  { print("SEQ_OFF");
+	  }
+	else  
+	if (blink_state == BLINK_SEQ_ON)
+	  { print("SEQ_ON");
+	  }
+	else  
+	if (blink_state == BLINK_SEQ_ON_CALC)
+	  { print("SEQ_ON_CALC");
+	  }
+
+	print( " top_level=");
+	if (above_header_tank_top)
+	  {
+	    print( "above");
+	  }
+	if (below_header_tank_top)
+	  {
+	    print( "below");
+	  }
+
+	print( " bottom_level=");
+	if (above_header_tank_bottom)
+	  {
+	    print( "above");
+	  }
+	if (below_header_tank_bottom)
+	  {
+	    print( "below");
+	  }
+
+
+	print("\n");
+	debug_count = 0;
+      }
+	
     
   }
 }
@@ -298,35 +413,46 @@ void setup_io (void) {
 // can prescale by 1024
 // I've made clk_cpu 8MHz, so seems like clkI/0 is 8mhz
 // divided by 2^16 and divided by 8 thats a timer overflow of 152.58Hz
-// which is close to 10..15
 // postscaling by 153, get one tick every 1s +/- 1% 
 uint8_t     t3_postscaler;
+uint8_t     t3_postscaler4;
 
 
 // PRR1 to 0 to enable t3
 void enable_t3_int (void)
 {
-  PRR1 &= ~(0x10);        // power control
+  //  PRR1 &= ~(0x10);        // power control
                           // clock source
                           // enable
                           // OF int
   TCCR3A = 0;             // no output compare bits, normal operation
   TCCR3B = 2;             // input prescaled 8
   TCCR3C = 0;             // no force output compare
-  TIFR3 =  0;             // no overflow
-  TIMSK3 = 1;             // timer inten
+  TIFR3 =  0;             // clear overflow flag
+  TIMSK3 = 1;             // timer overflow inten
 }
 
 
 
 ISR(TIMER3_OVF_vect)
 { /* timer3 overflow */
-  t3_postscaler = t3_postscaler + 1;
-  if (t3_postscaler == T3_POST)
+  /* dividing t3 by 15.25 to get close to 1hz */
+  t3_postscaler++;
+  if (((t3_postscaler == (T3_POST-1)) && (t3_postscaler4 !=(T3_POST4-1))) ||
+      (t3_postscaler == (T3_POST)))
     {
+      t3_postscaler4++;
+      if (t3_postscaler4 == T3_POST4)
+	{
+	  t3_postscaler4 = 0;
+	}
       t3_postscaler = 0;
       timer = timer + 1;
-      on_timer = on_timer + 1;
+      if (pump_state == PUMP_STATE_ON)
+	{
+	  on_timer = on_timer + 1;
+	}
     }
+  
 }
 
