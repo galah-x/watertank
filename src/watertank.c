@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-02-04 09:59:20 john";
+ * Time-stamp: "2018-04-21 15:23:35 john";
  * John Sheahan December 2017
  *
  */
@@ -10,11 +10,16 @@
 #include <avr/pgmspace.h>
 #include <util/delay_basic.h>
 #include <util/delay.h>
+
+// #define DEBUG
+#ifdef DEBUG
 #include "usb_debug_only.h"
 #include "print.h"
+#include "printd.h"
+#endif
+
 #include "watertank.h"
 #include "i2c_master.h"
-#include "printd.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,9 +100,12 @@ int main(void)
   uint8_t     last_credit_pb;      // debounces pushbutton
   int16_t     credits;
   int16_t     blink_seq_count;
+  
+#ifdef DEBUG
   uint8_t     debug_count;
   uint16_t    time_temp;  
-  //  uint8_t    time_temp8;  
+#endif
+  
   uint8_t    limits_were_broken;  
 
   // set for 8 MHz clock, and make sure the LED is off
@@ -110,13 +118,16 @@ int main(void)
   LED_OFF;
   _delay_ms(300);
   LED_ON;
-  debug_count=0;
-
+#ifdef DEBUG
+    debug_count=0;
+#endif
   // INITIALIZE the USB, but don't want for the host to
   // configure.  The first several messages sent will be
   // lost because the PC hasn't configured the USB yet,
   // need hid_listen running
-  usb_init();
+#ifdef DEBUG
+    usb_init();
+#endif
   on_timer = 0;
   blink_timer = 0;
   timer = 0;
@@ -132,7 +143,9 @@ int main(void)
     _delay_ms(500);
     LED_OFF;
     _delay_ms(500);
+#ifdef DEBUG
     print("hello from watertank\n");
+#endif
   }
   LED_ON;
   // main loop runs forever, about every 100ms. Thats the time resolution of
@@ -157,16 +170,15 @@ int main(void)
 	{
 	  if (above_header_tank_top)
 	    {
+	      pump_state = PUMP_STATE_OFF;
+	      PUMP_OFF;
 	      if (below_header_tank_bottom)
 		{
 		  pump_state = PUMP_STATE_LIMITS_BROKEN;
-		  PUMP_OFF;
 		  limits_were_broken = 1;
 		  credits = 0;
 		  break;
 		}
-	      pump_state = PUMP_STATE_OFF;
-	      PUMP_OFF;
 	    }
 	  if (on_timer >= ON_CREDIT_TIME) {
 	    if (credits > 0)
@@ -191,7 +203,9 @@ int main(void)
 		  on_timer = 0;
 		  PUMP_ON;
 		}
-	    }  
+	    }
+	  // to be sure
+	  PUMP_OFF;
 	  break;
 	}
       }
@@ -330,7 +344,7 @@ int main(void)
     // phex1(time_temp8);
     // print("\n");
 	  
-#define DEBUG
+    // #define DEBUG
 #ifdef DEBUG
     debug_count++;
     if (debug_count == 50)

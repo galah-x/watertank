@@ -8,6 +8,7 @@
 
 
 // how long the motor needs to run to claim a credit. //~5l/min
+// so a credit is 12 seconds worth, or 1 litre of water.
 #define ON_CREDIT_TIME 12
 
 // how many credits to allocate each PB press (about a tank) 
