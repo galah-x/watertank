@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-04-21 15:23:35 john";
+ * Time-stamp: "2018-04-22 16:16:59 john";
  * John Sheahan December 2017
  *
  */
@@ -119,15 +119,14 @@ int main(void)
   _delay_ms(300);
   LED_ON;
 #ifdef DEBUG
-    debug_count=0;
-#endif
+  debug_count=0;
   // INITIALIZE the USB, but don't want for the host to
   // configure.  The first several messages sent will be
   // lost because the PC hasn't configured the USB yet,
   // need hid_listen running
-#ifdef DEBUG
-    usb_init();
+  usb_init();
 #endif
+
   on_timer = 0;
   blink_timer = 0;
   timer = 0;
@@ -204,23 +203,25 @@ int main(void)
 		  PUMP_ON;
 		}
 	    }
-	  // to be sure
-	  PUMP_OFF;
-	  break;
+	  else
+	    {
+	      // to be sure
+	      PUMP_OFF;
+	      break;
+	    }
 	}
       }
     
-    
     // UI state machine
     // today, Only UI input is the manual credit pushbutton.
-
+    
     // debounce the pb a bit. Issue credit on posedge.
     if ((last_credit_pb != credit_pb_state) &&  (credit_pb_pressed))
       {
 	credits += CREDIT_PER_PB;
       }
     last_credit_pb = credit_pb_state;
-
+    
     // blinker state machine
     // blink_timer is a single byte, so don't worry about ISRs / SEI / CLI
     // the blink code is:
