@@ -1,7 +1,7 @@
 /* watertank filler firmware 
  *
  * most all is my code now
- * Time-stamp: "2018-04-22 16:16:59 john";
+ * Time-stamp: "2018-04-22 17:48:52 john";
  * John Sheahan December 2017
  *
  */
@@ -168,21 +168,18 @@ int main(void)
       case PUMP_STATE_ON:
 	{
 	  if (above_header_tank_top)
-	    {
-	      pump_state = PUMP_STATE_OFF;
+	    { pump_state = PUMP_STATE_OFF;
 	      PUMP_OFF;
 	      if (below_header_tank_bottom)
 		{
 		  pump_state = PUMP_STATE_LIMITS_BROKEN;
 		  limits_were_broken = 1;
 		  credits = 0;
-		  break;
 		}
 	    }
-	  if (on_timer >= ON_CREDIT_TIME) {
+	  else if (on_timer >= ON_CREDIT_TIME) {
 	    if (credits > 0)
-	      {
-		credits--;
+	      {	credits--;
 		on_timer = 0;
 	      }
 	    else 
@@ -195,8 +192,7 @@ int main(void)
       case PUMP_STATE_OFF:
 	{
 	  if (below_header_tank_bottom)
-	    {
-	      if (credits > 0)
+	    { if (credits > 0)
 		{
 		  pump_state = PUMP_STATE_ON;
 		  on_timer = 0;
@@ -204,11 +200,10 @@ int main(void)
 		}
 	    }
 	  else
-	    {
-	      // to be sure
+	    { // to be sure
 	      PUMP_OFF;
-	      break;
 	    }
+	  break;
 	}
       }
     
@@ -255,7 +250,6 @@ int main(void)
 	      blink_timer=0;
 	      LED_OFF;
 	      blink_seq_count=credits / credit_blink_scale;
-	      
 	    }
 	  break;
 	}
@@ -308,10 +302,10 @@ int main(void)
 	    }
 	  blink_state = BLINK_SEQ_ON;
 	}
-	// note fall through is intentional
+	// note fall through is intentional only here.
 	
       case BLINK_SEQ_ON:
-	
+	{	
 	  if (blink_timer >= blink_seq_on_time)
 	    { blink_state = BLINK_SEQ_OFF;
 	      blink_timer=0;
@@ -319,8 +313,8 @@ int main(void)
 	    }
 	  break;
 	}
-
-	
+      }
+  	
 	
 
     // auto issue credit daily.
@@ -341,81 +335,76 @@ int main(void)
 
     // debug
 
-    //    time_temp8 = timer;
+    // time_temp8 = timer;
     // phex1(time_temp8);
     // print("\n");
 	  
     // #define DEBUG
 #ifdef DEBUG
-    debug_count++;
-    if (debug_count == 50)
-      {
-	print("credit=");
-	printd3(credits);
-	print(" on_timer=");
-	phex16(on_timer);
-	time_temp = timer;
-	print(" timer=");
-	phex16(time_temp);
-	print(" pump_state=");
+      debug_count++;
+      if (debug_count == 50)
+	{
+	  print("credit=");
+	  printd3(credits);
+	  print(" on_timer=");
+	  phex16(on_timer);
+	  time_temp = timer;
+	  print(" timer=");
+	  phex16(time_temp);
+	  print(" pump_state=");
 
-	if (pump_state == PUMP_STATE_LIMITS_BROKEN)
-	  { print("LIMITS_BROKEN");
-	  }
-	else  
-	  if (pump_state == PUMP_STATE_ON)
-	    { print("ON");
+	  if (pump_state == PUMP_STATE_LIMITS_BROKEN)
+	    { print("LIMITS_BROKEN");
 	    }
-	  else
-	    if (pump_state == PUMP_STATE_OFF)
+	  else  
+	    if (pump_state == PUMP_STATE_ON)
+	      { print("ON");
+	      }
+	    else if (pump_state == PUMP_STATE_OFF)
 	      { print("OFF");
 	      }
 	
-	print(" blink_state=");
-	if (blink_state == BLINK_FRAME_GAP)
-	  { print("FRAME_GAP");
-	  }
-	else  
-	if (blink_state == BLINK_FRAME_ON)
-	  { print("FRAME_ON");
-	  }
-	else  
-	if (blink_state == BLINK_SEQ_OFF)
-	  { print("SEQ_OFF");
-	  }
-	else  
-	if (blink_state == BLINK_SEQ_ON)
-	  { print("SEQ_ON");
-	  }
-	else  
-	if (blink_state == BLINK_SEQ_ON_CALC)
-	  { print("SEQ_ON_CALC");
-	  }
+	  print(" blink_state=");
+	  if (blink_state == BLINK_FRAME_GAP)
+	    { print("FRAME_GAP");
+	    }
+	  else if (blink_state == BLINK_FRAME_ON)
+	    { print("FRAME_ON");
+	    }
+	  else if (blink_state == BLINK_SEQ_OFF)
+	    { print("SEQ_OFF");
+	    }
+	  else if (blink_state == BLINK_SEQ_ON)
+	    { print("SEQ_ON");
+	    }
+	  else if (blink_state == BLINK_SEQ_ON_CALC)
+	    { print("SEQ_ON_CALC");
+	    }
 
-	print( " top_level=");
-	if (above_header_tank_top)
-	  {
-	    print( "above");
-	  }
-	if (below_header_tank_top)
-	  {
-	    print( "below");
-	  }
+	  print( " top_level=");
+	  if (above_header_tank_top)
+	    {
+	      print( "above");
+	    }
+	  if (below_header_tank_top)
+	    {
+	      print( "below");
+	    }
 
-	print( " bottom_level=");
-	if (above_header_tank_bottom)
-	  {
-	    print( "above");
-	  }
-	if (below_header_tank_bottom)
-	  {
-	    print( "below");
-	  }
+	  print( " bottom_level=");
+	  if (above_header_tank_bottom)
+	    {
+	      print( "above");
+	    }
+	  if (below_header_tank_bottom)
+	    {
+	      print( "below");
+	    }
 
 
-	print("\n");
-	debug_count = 0;
-      }
+	  print("\n");
+	  debug_count = 0;
+	}
 #endif	
     
   }
