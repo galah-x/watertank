@@ -28,7 +28,7 @@
 // how many loop iterations (~100ms) for blink code bits
 #define max_blink_seq  5
 
-// how to scale the credits to blinks... with max_blink_seq*credit_blink_sclae per blink
+// how to scale the credits to blinks... with max_blink_seq*credit_blink_scale per blink
 #define credit_blink_scale 10
 
 #define T3_POST 15
